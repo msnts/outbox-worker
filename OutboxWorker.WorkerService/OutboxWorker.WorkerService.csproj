@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>dotnet-WorkerService-3e7250dd-ee01-4b7e-b509-e9b5ef4f959c</UserSecretsId>
+    </PropertyGroup>
+    <ItemGroup>
+        <RuntimeHostConfigurationOption Include="Azure.Experimental.EnableActivitySource" Value="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Aspire.Azure.Messaging.ServiceBus" Version="8.2.2" />
+        <PackageReference Include="Aspire.Hosting.MongoDB" Version="8.2.2" />
+        <PackageReference Include="Aspire.MongoDB.Driver" Version="8.2.2" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\OutboxWorker.ServiceDefaults\OutboxWorker.ServiceDefaults.csproj" />
+    </ItemGroup>
+</Project>
