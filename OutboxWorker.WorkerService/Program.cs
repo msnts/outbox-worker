@@ -19,6 +19,7 @@ builder.Services.AddHostedService<MessageRelayWorker>();
 BsonClassMap.RegisterClassMap<OutboxMessage>(classMap =>
 {
     classMap.AutoMap();
+    classMap.SetIgnoreExtraElements(true);
 });
 
 builder.Services.AddOptions<OutboxOptions>().BindConfiguration(nameof(OutboxOptions));

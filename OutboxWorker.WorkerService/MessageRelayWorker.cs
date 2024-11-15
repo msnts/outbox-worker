@@ -56,10 +56,27 @@ public class MessageRelayWorker : BackgroundService
                     
                     using (var cursor = await _outboxMessages.FindAsync(session, x => true, findOptions, stoppingToken))
                     {
-                        foreach (var batch in cursor.ToEnumerable(stoppingToken).Chunk(_options.Value.BatchSize))
+                        activity?.AddEvent(new("Processing start"));
+                        var messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
+                        var count = 0;
+                        
+                        while (await cursor.MoveNextAsync(stoppingToken))
                         {
-                            tasks.Add(ProcessBatchAsync(batch, stoppingToken));
+                            foreach (var message in cursor.Current)
+                            {
+                                if (messageBatch.TryAddMessage(new ServiceBusMessage(message.Body)) && count < _options.Value.BatchSize)
+                                {
+                                    count++;
+                                    continue;
+                                }
+
+                                tasks.Add(SendMessageBatch(messageBatch, stoppingToken));
+                                messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
+                                count = 0;
+                            }
                         }
+                        
+                        tasks.Add(SendMessageBatch(messageBatch, stoppingToken));
                     }
 
                     await Task.WhenAll(tasks);
@@ -78,22 +95,11 @@ public class MessageRelayWorker : BackgroundService
         }
     }
 
-    private async Task ProcessBatchAsync(OutboxMessage[] messages, CancellationToken stoppingToken)
+    private async Task SendMessageBatch(ServiceBusMessageBatch messageBatch, CancellationToken stoppingToken)
     {
-        var messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
-
-        foreach (var message in messages)
-        {
-            if (messageBatch.TryAddMessage(new ServiceBusMessage(message.Payload)))
-            {
-                continue;
-            }
-            
-            await _sender.SendMessagesAsync(messageBatch, stoppingToken);
-            messageBatch.Dispose();
-            messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
-        }
+        using var activity = _activitySource.StartActivity("Sender-Message-Batch");
         
         await _sender.SendMessagesAsync(messageBatch, stoppingToken);
+        messageBatch.Dispose();
     }
 }

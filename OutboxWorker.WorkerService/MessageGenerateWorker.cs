@@ -21,7 +21,7 @@ public class MessageGenerateWorker : BackgroundService
 
         for (int i = 0; i < 1000; i++)
         {
-            messages.Add(new() { Payload = "Message"});
+            messages.Add(new() { Body = "Message"});
         }
 
         return collection.InsertManyAsync(messages);

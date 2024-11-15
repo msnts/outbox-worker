@@ -4,6 +4,6 @@ namespace WorkerService1;
 
 public class OutboxMessage
 {
-    public ObjectId Id { get; set; }
-    public string Payload { get; set; }
+    public string Id { get; set; }
+    public string Body { get; set; }
 }
