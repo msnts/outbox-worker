@@ -1,29 +1,48 @@
+using Bogus;
+using Bogus.DataSets;
 using MongoDB.Driver;
 
-namespace WorkerService1;
+namespace OutboxWorker.WorkerService;
 
 public class MessageGenerateWorker : BackgroundService
 {
-    public MessageGenerateWorker()
+    private readonly IMongoCollection<OutboxMessage> _outboxMessages;
+    
+    public MessageGenerateWorker(IMongoClient mongoClient)
     {
-        
+        var database = mongoClient.GetDatabase("OutboxWorkerService");
+
+        _outboxMessages = database.GetCollection<OutboxMessage>("OutboxMessage");
     }
     
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var mongoClient = new MongoClient("***REMOVED***");
+        var usersGenerator = new Faker<User>()
+            .RuleFor(u => u.Id, f => Guid.NewGuid())
+            .RuleFor(u => u.Gender, f => f.PickRandom<Name.Gender>())
+            .RuleFor(u => u.FirstName, (f, u) => f.Name.FirstName(u.Gender))
+            .RuleFor(u => u.LastName, (f, u) => f.Name.LastName(u.Gender))
+            .RuleFor(u => u.Avatar, f => f.Internet.Avatar())
+            .RuleFor(u => u.UserName, (f, u) => f.Internet.UserName(u.FirstName, u.LastName))
+            .RuleFor(u => u.Email, (f, u) => f.Internet.Email(u.FirstName, u.LastName))
+            .RuleFor(u => u.CartId, f => Guid.NewGuid())
+            .RuleFor(u => u.FullName, (f, u) => u.FirstName + " " + u.LastName);
+
+        var users = usersGenerator.Generate(10_000);
         
-        var database = mongoClient.GetDatabase("OutboxWorkerService");
+        var messages = new List<OutboxMessage>(10_000);
 
-        var collection = database.GetCollection<OutboxMessage>("OutboxMessage");
-
-        var messages = new List<OutboxMessage>(1000);
-
-        for (int i = 0; i < 1000; i++)
+        for (var i = 0; i < 10_000; i++)
         {
-            messages.Add(new() { Body = "Message"});
+            messages.Add(new OutboxMessage
+            {
+                Id = Guid.CreateVersion7(),
+                CorrelationId = Guid.NewGuid(),
+                Subject = "UserCreated",
+                Body = users[i]
+            });
         }
 
-        return collection.InsertManyAsync(messages);
+        return _outboxMessages.InsertManyAsync(messages, cancellationToken:stoppingToken);
     }
 }

@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using OutboxWorker.WorkerService.Configurations;
-using WorkerService1;
 
 namespace OutboxWorker.WorkerService;
 
@@ -51,7 +51,6 @@ public class MessageRelayWorker : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             var messageBatch = await _sender.CreateMessageBatchAsync(batchOptions, stoppingToken);
-            var count = 0;
             try
             {
                 using var activity = _activitySource.StartActivity("Sender");
@@ -61,26 +60,10 @@ public class MessageRelayWorker : BackgroundService
 
                 using (var cursor = await _outboxMessages.FindAsync(session, x => true, findOptions, stoppingToken))
                 {
-                    activity?.AddEvent(new("Processing start"));
-                    //var messageBatch = await _sender.CreateMessageBatchAsync(batchOptions, stoppingToken);
-                    //var count = 0;
                     while (await cursor.MoveNextAsync(stoppingToken))
                     {
-                        foreach (var message in cursor.Current)
-                        {
-                            if (messageBatch.TryAddMessage(new ServiceBusMessage(message.Body)) && count < _options.Value.BatchSize)
-                            {
-                                count++;
-                                continue;
-                            }
-
-                            tasks.Add(SendMessageBatchAsync(messageBatch, stoppingToken));
-                            messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
-                            count = 0;
-                        }
+                        tasks.Add(ProcessCursorBatchAsync(cursor.Current.ToList(), stoppingToken));
                     }
-                        
-                    tasks.Add(SendMessageBatchAsync(messageBatch, stoppingToken));
                 }
 
                 await Task.WhenAll(tasks);
@@ -96,6 +79,44 @@ public class MessageRelayWorker : BackgroundService
             
             break;
         }
+    }
+
+    private async Task ProcessCursorBatchAsync(List<OutboxMessage> messages, CancellationToken stoppingToken)
+    {
+        using var activity = _activitySource.StartActivity();
+        var count = 0;
+        var tasks = new List<Task>((messages.Count / _options.Value.BatchSize) + 1);
+        var messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
+        
+        for (var i = 0; i < messages.Count; i++)
+        {
+            var message = OutboxMessageToServiceBusMessage(messages[i]);
+            
+            if (messageBatch.TryAddMessage(message) && count < _options.Value.BatchSize)
+            {
+                count++;
+                continue;
+            }
+
+            tasks.Add(SendMessageBatchAsync(messageBatch, stoppingToken));
+            messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
+            count = 0;
+        }
+        
+        tasks.Add(SendMessageBatchAsync(messageBatch, stoppingToken));
+
+        await Task.WhenAll(tasks);
+    }
+    
+    private static ServiceBusMessage OutboxMessageToServiceBusMessage(OutboxMessage message)
+    {
+        return new ServiceBusMessage(message.ToJson())
+        {
+            MessageId = message.Id.ToString(),
+            CorrelationId = message.CorrelationId.ToString(),
+            Subject = message.Subject,
+            ContentType = "application/json"
+        };
     }
 
     private async Task SendMessageBatchAsync(ServiceBusMessageBatch messageBatch, CancellationToken stoppingToken)

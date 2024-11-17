@@ -1,8 +1,9 @@
 using System.Diagnostics;
+using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.Serializers;
 using OutboxWorker.WorkerService;
 using OutboxWorker.WorkerService.Configurations;
-using WorkerService1;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -16,7 +17,15 @@ builder.AddAzureServiceBusClient("messaging");
 
 builder.Services.AddHostedService<MessageRelayWorker>();
 
+BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
+
 BsonClassMap.RegisterClassMap<OutboxMessage>(classMap =>
+{
+    classMap.AutoMap();
+    classMap.SetIgnoreExtraElements(true);
+});
+
+BsonClassMap.RegisterClassMap<User>(classMap =>
 {
     classMap.AutoMap();
     classMap.SetIgnoreExtraElements(true);
