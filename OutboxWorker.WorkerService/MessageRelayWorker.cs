@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
@@ -16,6 +18,8 @@ public class MessageRelayWorker : BackgroundService
     private readonly ServiceBusSender _sender;
     private readonly IMongoClient _mongoClient;
     private readonly IMongoCollection<OutboxMessage> _outboxMessages;
+    private readonly FindOptions<OutboxMessage> _findOptions;
+    private readonly CreateMessageBatchOptions _batchOptions;
 
     public MessageRelayWorker(IOptions<OutboxOptions> options, IMongoClient mongoClient, ServiceBusClient busClient,
         ActivitySource activitySource, ILogger<MessageRelayWorker> logger)
@@ -31,37 +35,40 @@ public class MessageRelayWorker : BackgroundService
         var database = _mongoClient.GetDatabase("OutboxWorkerService");
 
         _outboxMessages = database.GetCollection<OutboxMessage>("OutboxMessage");
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        var tasks = new List<Task>((_options.Value.MongoOptions.Limit / _options.Value.BatchSize) + 1);
         
-        var findOptions = new FindOptions<OutboxMessage>
+        _findOptions = new FindOptions<OutboxMessage>
         {
             Sort = Builders<OutboxMessage>.Sort.Ascending(m => m.Id),
             Limit = _options.Value.MongoOptions.Limit,
             BatchSize = _options.Value.MongoOptions.BatchSize
         };
-        var batchOptions = new CreateMessageBatchOptions()
+        
+        _batchOptions = new CreateMessageBatchOptions()
         {
             MaxSizeInBytes = 262144
         };
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        //Todo: Converter esta lista em um array
+        var tasks = new List<Task>((_options.Value.MongoOptions.Limit / _options.Value.BatchSize) + 1);
         
         while (!stoppingToken.IsCancellationRequested)
         {
-            var messageBatch = await _sender.CreateMessageBatchAsync(batchOptions, stoppingToken);
+            var messageBatch = await _sender.CreateMessageBatchAsync(_batchOptions, stoppingToken);
             try
             {
-                using var activity = _activitySource.StartActivity("Sender");
+                using var activity = _activitySource.StartActivity();
 
                 using var session = await _mongoClient.StartSessionAsync(cancellationToken: stoppingToken);
                 session.StartTransaction();
 
-                using (var cursor = await _outboxMessages.FindAsync(session, x => true, findOptions, stoppingToken))
+                using (var cursor = await _outboxMessages.FindAsync(session, x => true, _findOptions, stoppingToken))
                 {
                     while (await cursor.MoveNextAsync(stoppingToken))
                     {
+                        
                         tasks.Add(ProcessCursorBatchAsync(cursor.Current.ToList(), stoppingToken));
                     }
                 }
@@ -85,9 +92,11 @@ public class MessageRelayWorker : BackgroundService
     {
         using var activity = _activitySource.StartActivity();
         var count = 0;
+        //todo: converter esta lista em um array
         var tasks = new List<Task>((messages.Count / _options.Value.BatchSize) + 1);
         var messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
         
+        //todo: converter esse list loop em um memory<t> loop
         for (var i = 0; i < messages.Count; i++)
         {
             var message = OutboxMessageToServiceBusMessage(messages[i]);
@@ -108,6 +117,7 @@ public class MessageRelayWorker : BackgroundService
         await Task.WhenAll(tasks);
     }
     
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ServiceBusMessage OutboxMessageToServiceBusMessage(OutboxMessage message)
     {
         return new ServiceBusMessage(message.ToJson())
