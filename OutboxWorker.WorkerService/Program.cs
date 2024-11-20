@@ -33,6 +33,7 @@ BsonClassMap.RegisterClassMap<User>(classMap =>
 
 builder.Services.AddOptions<OutboxOptions>().BindConfiguration(nameof(OutboxOptions));
 builder.Services.AddSingleton<ActivitySource>(x => new ActivitySource("OutboxWorker.DistributedTracing", "1.0.0"));
+builder.Services.AddSingleton<OutboxMetrics>();
 
 var host = builder.Build();
 host.Run();
