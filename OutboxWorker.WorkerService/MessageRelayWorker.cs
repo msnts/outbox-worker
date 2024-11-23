@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
@@ -66,23 +65,16 @@ public class MessageRelayWorker : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             stopwatch.Start();
+            
+            using var activity = _activitySource.StartActivity();
+            
             try
             {
-                using var activity = _activitySource.StartActivity();
+                //todo: acquire lock
 
-                using var session = await _mongoClient.StartSessionAsync(cancellationToken: stoppingToken);
-                session.StartTransaction();
-
-                using (var cursor = await _outboxMessages.FindAsync(session, x => true, _findOptions, stoppingToken))
-                {
-                    var slices = Slices(cursor.ToList().AsMemory());
-
-                    await Parallel.ForEachAsync(slices, stoppingToken, async (memory, token) => await ProcessCursorBatchAsync(memory, token));
-                }
-                
-                //todo: excluir as mensagens antes do commit
-                await session.CommitTransactionAsync(stoppingToken);
+                await DoExecuteAsync(stoppingToken);
             }
+            //todo: tratar as exceptions
             finally
             {
                 stopwatch.Stop();
@@ -98,7 +90,27 @@ public class MessageRelayWorker : BackgroundService
             break;
         }
     }
-    
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private async Task DoExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var session = await _mongoClient.StartSessionAsync(cancellationToken: stoppingToken);
+        session.StartTransaction();
+
+        try
+        {
+            using var cursor = await _outboxMessages.FindAsync(session, x => true, _findOptions, stoppingToken);
+                    
+            var slices = Slices(cursor.ToList().AsMemory());
+
+            await Parallel.ForEachAsync(slices, stoppingToken, async (memory, token) => await ProcessCursorBatchAsync(session, memory, token));
+        }
+        finally
+        {
+            await session.CommitTransactionAsync(stoppingToken);
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private ReadOnlyMemory<RawBsonDocument>[] Slices(ReadOnlyMemory<RawBsonDocument> messages)
     {
@@ -121,7 +133,7 @@ public class MessageRelayWorker : BackgroundService
         return slices;
     }
 
-    private async Task ProcessCursorBatchAsync(ReadOnlyMemory<RawBsonDocument> messages, CancellationToken stoppingToken)
+    private async Task ProcessCursorBatchAsync(IClientSessionHandle session, ReadOnlyMemory<RawBsonDocument> messages, CancellationToken stoppingToken)
     {
         using var activity = _activitySource.StartActivity();
         var count = 0u;
@@ -135,7 +147,7 @@ public class MessageRelayWorker : BackgroundService
         {
             var message = OutboxMessageToServiceBusMessage(messages.Span[i]);
             
-            if (messageBatch.TryAddMessage(message) && count < _options.Value.BatchSize)
+            if (count < _options.Value.BatchSize && messageBatch.TryAddMessage(message))
             {
                 count++;
                 continue;
@@ -149,6 +161,15 @@ public class MessageRelayWorker : BackgroundService
         tasks[t] = SendMessageBatchAsync(messageBatch, stoppingToken);
 
         await Task.WhenAll(tasks);
+        
+        //todo: excluir as mensagens antes do commit
+        /*var first = messages.Span[0]["_id"].AsGuid.ToString();
+        var last = messages.Span[messages.Length - 1]["_id"].AsGuid.ToString();
+        
+        var builder = Builders<RawBsonDocument>.Filter;
+        var filter = builder.And(builder.Gte(r => r["_id"], first), builder.Lte(r => r["_id"], last));
+
+        await _outboxMessages.DeleteManyAsync(session, filter, stoppingToken);*/
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
