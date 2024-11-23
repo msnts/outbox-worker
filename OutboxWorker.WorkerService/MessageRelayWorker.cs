@@ -21,6 +21,7 @@ public class MessageRelayWorker : BackgroundService
     private readonly FindOptions<RawBsonDocument> _findOptions;
     private readonly CreateMessageBatchOptions _batchOptions;
     private readonly OutboxMetrics _metrics;
+    private readonly ParallelOptions _parallelOptions;
 
     public MessageRelayWorker(IOptions<OutboxOptions> options, IMongoClient mongoClient, ServiceBusClient busClient,
         ActivitySource activitySource, ILogger<MessageRelayWorker> logger, OutboxMetrics metrics)
@@ -49,15 +50,22 @@ public class MessageRelayWorker : BackgroundService
         {
             MaxSizeInBytes = 262144
         };
+
+        _parallelOptions = new ParallelOptions()
+        {
+            MaxDegreeOfParallelism = _options.Value.MaxDegreeOfParallelism
+        };
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var tasks = new List<Task>((_options.Value.MongoOptions.Limit / _options.Value.BatchSize) + 1);
+        var messageBatch = await _sender.CreateMessageBatchAsync(_batchOptions, stoppingToken);
+        var stopwatch = new Stopwatch();
+        _parallelOptions.CancellationToken = stoppingToken;
         
         while (!stoppingToken.IsCancellationRequested)
         {
-            var messageBatch = await _sender.CreateMessageBatchAsync(_batchOptions, stoppingToken);
+            stopwatch.Start();
             try
             {
                 using var activity = _activitySource.StartActivity();
@@ -67,33 +75,60 @@ public class MessageRelayWorker : BackgroundService
 
                 using (var cursor = await _outboxMessages.FindAsync(session, x => true, _findOptions, stoppingToken))
                 {
-                    while (await cursor.MoveNextAsync(stoppingToken))
-                    {
-                        //todo: Paralelizar o processamento com Parallel.ForEachAsync()
-                        tasks.Add(ProcessCursorBatchAsync(cursor.Current.ToList().AsMemory(), stoppingToken));
-                    }
-                }
+                    var slices = Slices(cursor.ToList().AsMemory());
 
-                await Task.WhenAll(tasks);
+                    await Parallel.ForEachAsync(slices, stoppingToken, async (memory, token) => await ProcessCursorBatchAsync(memory, token));
+                }
                 
+                //todo: excluir as mensagens antes do commit
                 await session.CommitTransactionAsync(stoppingToken);
-                
-                tasks.Clear();
             }
             finally
             {
-                await Task.Delay(_options.Value.Delay, stoppingToken);
+                stopwatch.Stop();
+
+                if (stopwatch.ElapsedMilliseconds < _options.Value.Delay)
+                {
+                    await Task.Delay(_options.Value.Delay - (int)stopwatch.ElapsedMilliseconds, stoppingToken);
+                }
+                
+                stopwatch.Reset();
             }
             
             break;
         }
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ReadOnlyMemory<RawBsonDocument>[] Slices(ReadOnlyMemory<RawBsonDocument> messages)
+    {
+        var sliceSize = _options.Value.MongoOptions.Limit / _options.Value.MaxDegreeOfParallelism;
+        var sliceCount = (messages.Length + sliceSize - 1) / sliceSize;
+        int start;
+        var slices = new ReadOnlyMemory<RawBsonDocument>[sliceCount];
+
+        for (var i = 0; i < sliceCount; i++)
+        {
+            start = i * sliceSize;
+            if (start + sliceSize > messages.Length)
+            {
+                slices[i] = messages.Slice(start);
+                break;
+            }
+            slices[i] = messages.Slice(start, sliceSize);
+        }
+
+        return slices;
     }
 
     private async Task ProcessCursorBatchAsync(ReadOnlyMemory<RawBsonDocument> messages, CancellationToken stoppingToken)
     {
         using var activity = _activitySource.StartActivity();
         var count = 0u;
-        var tasks = new List<Task>((messages.Length / _options.Value.BatchSize) + 1);
+        var t = 0u;
+        var taskCount = (messages.Length + _options.Value.BatchSize - 1) / _options.Value.BatchSize;
+        var tasks = new Task[taskCount];
+        
         var messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
         
         for (var i = 0; i < messages.Length; i++)
@@ -106,12 +141,12 @@ public class MessageRelayWorker : BackgroundService
                 continue;
             }
 
-            tasks.Add(SendMessageBatchAsync(messageBatch, stoppingToken));
+            tasks[t++] = SendMessageBatchAsync(messageBatch, stoppingToken);
             messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
             count = 0;
         }
         
-        tasks.Add(SendMessageBatchAsync(messageBatch, stoppingToken));
+        tasks[t] = SendMessageBatchAsync(messageBatch, stoppingToken);
 
         await Task.WhenAll(tasks);
     }
@@ -132,7 +167,7 @@ public class MessageRelayWorker : BackgroundService
     {
         using var activity = _activitySource.StartActivity();
         //await _sender.SendMessagesAsync(messageBatch, stoppingToken);
-        await Task.Delay(800, stoppingToken);
+        await Task.Delay(600, stoppingToken);
         messageBatch.Dispose();
         _metrics.IncrementMessageCount(messageBatch.Count);
     }
