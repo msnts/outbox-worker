@@ -433,3 +433,7 @@ FodyWeavers.xsd
 
 *.dll
 launchSettings.json
+
+.devsetup/*
+.env
+global.json
