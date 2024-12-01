@@ -8,6 +8,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OutboxWorker.ServiceDefault
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OutboxWorker.WorkerService", "OutboxWorker.WorkerService\OutboxWorker.WorkerService.csproj", "{9D90A85B-94E9-49F0-8695-49CE8DC689E8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OutboxWorker.Benchmark", "OutboxWorker.Benchmark\OutboxWorker.Benchmark.csproj", "{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,6 +28,10 @@ Global
 		{9D90A85B-94E9-49F0-8695-49CE8DC689E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9D90A85B-94E9-49F0-8695-49CE8DC689E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9D90A85B-94E9-49F0-8695-49CE8DC689E8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

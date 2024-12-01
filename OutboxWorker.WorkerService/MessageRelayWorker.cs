@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using OutboxWorker.WorkerService.Configurations;
+using OutboxWorker.WorkerService.Extensions;
 
 namespace OutboxWorker.WorkerService;
 
@@ -21,6 +22,8 @@ public class MessageRelayWorker : BackgroundService
     private readonly CreateMessageBatchOptions _batchOptions;
     private readonly OutboxMetrics _metrics;
     private readonly ParallelOptions _parallelOptions;
+    private readonly DeleteOptions _deleteOptions;
+    private IClientSessionHandle _currentSession;
 
     public MessageRelayWorker(IOptions<OutboxOptions> options, IMongoClient mongoClient, ServiceBusClient busClient,
         ActivitySource activitySource, ILogger<MessageRelayWorker> logger, OutboxMetrics metrics)
@@ -54,6 +57,8 @@ public class MessageRelayWorker : BackgroundService
         {
             MaxDegreeOfParallelism = _options.Value.MaxDegreeOfParallelism
         };
+
+        _deleteOptions = new DeleteOptions();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -96,57 +101,45 @@ public class MessageRelayWorker : BackgroundService
     {
         using var session = await _mongoClient.StartSessionAsync(cancellationToken: stoppingToken);
         session.StartTransaction();
+        _currentSession = session;
 
         try
         {
             using var cursor = await _outboxMessages.FindAsync(session, x => true, _findOptions, stoppingToken);
-                    
-            var slices = Slices(cursor.ToList().AsMemory());
+            
+            var messages = await cursor.ToListAsync(stoppingToken);
+            
+            var sliceSize = _options.Value.MongoOptions.Limit / _options.Value.MaxDegreeOfParallelism;
+            
+            var slices = messages.SliceInMemory(sliceSize);
 
-            await Parallel.ForEachAsync(slices, stoppingToken, async (memory, token) => await ProcessCursorBatchAsync(session, memory, token));
+            await Parallel.ForEachAsync(slices, stoppingToken, async (memory, token) => await ProcessCursorBatchAsync(memory, token));
         }
         finally
         {
-            await session.CommitTransactionAsync(stoppingToken);
+            await session.AbortTransactionAsync(stoppingToken);
+            //await session.CommitTransactionAsync(stoppingToken);
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ReadOnlyMemory<RawBsonDocument>[] Slices(ReadOnlyMemory<RawBsonDocument> messages)
-    {
-        var sliceSize = _options.Value.MongoOptions.Limit / _options.Value.MaxDegreeOfParallelism;
-        var sliceCount = (messages.Length + sliceSize - 1) / sliceSize;
-        int start;
-        var slices = new ReadOnlyMemory<RawBsonDocument>[sliceCount];
-
-        for (var i = 0; i < sliceCount; i++)
-        {
-            start = i * sliceSize;
-            if (start + sliceSize > messages.Length)
-            {
-                slices[i] = messages.Slice(start);
-                break;
-            }
-            slices[i] = messages.Slice(start, sliceSize);
-        }
-
-        return slices;
-    }
-
-    private async Task ProcessCursorBatchAsync(IClientSessionHandle session, ReadOnlyMemory<RawBsonDocument> messages, CancellationToken stoppingToken)
+    private async Task ProcessCursorBatchAsync(ReadOnlyMemory<RawBsonDocument> messages, CancellationToken stoppingToken)
     {
         using var activity = _activitySource.StartActivity();
-        var count = 0u;
+        var count = 0;
         var t = 0u;
+        int i;
         var taskCount = (messages.Length + _options.Value.BrokerOptions.BatchSize - 1) / _options.Value.BrokerOptions.BatchSize;
         var tasks = new Task[taskCount];
         var batchSize = _options.Value.BrokerOptions.BatchSize;
         
         var messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
         
-        for (var i = 0; i < messages.Length; i++)
+        for (i = 0; i < messages.Length; i++)
         {
-            var message = OutboxMessageToServiceBusMessage(messages.Span[i]);
+            var stopwatch = Stopwatch.StartNew();
+            var message = messages.Span[i].ToServiceBusMessage();
+            stopwatch.Stop();
+            _logger.LogInformation("ToServiceBusMessage: {Duration}", stopwatch.ElapsedMilliseconds);
             
             if (count < batchSize && messageBatch.TryAddMessage(message))
             {
@@ -155,42 +148,43 @@ public class MessageRelayWorker : BackgroundService
             }
 
             tasks[t++] = SendMessageBatchAsync(messageBatch, stoppingToken);
+            //tasks[t++] = ProcessMessageBatchAsync(messageBatch, messages.Span[i - count], messages.Span[i], stoppingToken);
             messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
             count = 0;
         }
-        
+
+        i--;
         tasks[t] = SendMessageBatchAsync(messageBatch, stoppingToken);
+        //tasks[t] = ProcessMessageBatchAsync(messageBatch, messages.Span[i - count], messages.Span[i], stoppingToken);
 
         await Task.WhenAll(tasks);
-        
-        //todo: excluir as mensagens antes do commit
-        /*var first = messages.Span[0]["_id"].AsGuid.ToString();
-        var last = messages.Span[messages.Length - 1]["_id"].AsGuid.ToString();
-        
-        var builder = Builders<RawBsonDocument>.Filter;
-        var filter = builder.And(builder.Gte(r => r["_id"], first), builder.Lte(r => r["_id"], last));
-
-        await _outboxMessages.DeleteManyAsync(session, filter, stoppingToken);*/
-    }
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ServiceBusMessage OutboxMessageToServiceBusMessage(RawBsonDocument message)
-    {
-        return new ServiceBusMessage(message["Body"].AsBsonDocument.ToJson())
-        {
-            MessageId = message["_id"].AsGuid.ToString(),
-            CorrelationId = message["CorrelationId"].AsGuid.ToString(),
-            Subject = message["Subject"].AsString,
-            ContentType = "application/json"
-        };
     }
     
     private async Task SendMessageBatchAsync(ServiceBusMessageBatch messageBatch, CancellationToken stoppingToken)
     {
         using var activity = _activitySource.StartActivity();
         //await _sender.SendMessagesAsync(messageBatch, stoppingToken);
-        await Task.Delay(600, stoppingToken);
+        await Task.Delay(300, stoppingToken);
         messageBatch.Dispose();
         _metrics.IncrementMessageCount(messageBatch.Count);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private async Task RemoveMessageBatchAsync(RawBsonDocument firstMessage, RawBsonDocument lastMessage, CancellationToken stoppingToken)
+    {
+        var first = firstMessage["_id"].AsGuid.ToString();
+        var last = lastMessage["_id"].AsGuid.ToString();
+        
+        var builder = Builders<RawBsonDocument>.Filter;
+        var filter = builder.And(builder.Gte(r => r["_id"], first), builder.Lte(r => r["_id"], last));
+
+        await _outboxMessages.DeleteManyAsync(_currentSession, filter, _deleteOptions, stoppingToken);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private async Task ProcessMessageBatchAsync(ServiceBusMessageBatch messageBatch, RawBsonDocument firstMessage, RawBsonDocument lastMessage, CancellationToken stoppingToken)
+    {
+        await SendMessageBatchAsync(messageBatch, stoppingToken);
+        await RemoveMessageBatchAsync(firstMessage, lastMessage, stoppingToken);
     }
 }
