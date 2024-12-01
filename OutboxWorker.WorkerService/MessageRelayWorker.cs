@@ -32,9 +32,9 @@ public class MessageRelayWorker : BackgroundService
         _serviceBusClient = busClient;
         _metrics = metrics;
         
-        _sender = _serviceBusClient.CreateSender("messages");
+        _sender = _serviceBusClient.CreateSender(_options.Value.BrokerOptions.EntityName);
         
-        var database = _mongoClient.GetDatabase("OutboxWorkerService");
+        var database = _mongoClient.GetDatabase(_options.Value.MongoOptions.DatabaseName);
 
         _outboxMessages = database.GetCollection<RawBsonDocument>("OutboxMessage");
         
@@ -138,8 +138,9 @@ public class MessageRelayWorker : BackgroundService
         using var activity = _activitySource.StartActivity();
         var count = 0u;
         var t = 0u;
-        var taskCount = (messages.Length + _options.Value.BatchSize - 1) / _options.Value.BatchSize;
+        var taskCount = (messages.Length + _options.Value.BrokerOptions.BatchSize - 1) / _options.Value.BrokerOptions.BatchSize;
         var tasks = new Task[taskCount];
+        var batchSize = _options.Value.BrokerOptions.BatchSize;
         
         var messageBatch = await _sender.CreateMessageBatchAsync(stoppingToken);
         
@@ -147,7 +148,7 @@ public class MessageRelayWorker : BackgroundService
         {
             var message = OutboxMessageToServiceBusMessage(messages.Span[i]);
             
-            if (count < _options.Value.BatchSize && messageBatch.TryAddMessage(message))
+            if (count < batchSize && messageBatch.TryAddMessage(message))
             {
                 count++;
                 continue;
