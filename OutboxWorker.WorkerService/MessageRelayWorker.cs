@@ -24,6 +24,7 @@ public class MessageRelayWorker : BackgroundService
     private readonly ParallelOptions _parallelOptions;
     private readonly DeleteOptions _deleteOptions;
     private IClientSessionHandle _currentSession;
+    private readonly int _sliceSize;
 
     public MessageRelayWorker(IOptions<OutboxOptions> options, IMongoClient mongoClient, ServiceBusClient busClient,
         ActivitySource activitySource, ILogger<MessageRelayWorker> logger, OutboxMetrics metrics)
@@ -37,9 +38,7 @@ public class MessageRelayWorker : BackgroundService
         
         _sender = _serviceBusClient.CreateSender(_options.Value.BrokerOptions.EntityName);
         
-        var database = _mongoClient.GetDatabase(_options.Value.MongoOptions.DatabaseName);
-
-        _outboxMessages = database.GetCollection<RawBsonDocument>("OutboxMessage");
+        _outboxMessages = _mongoClient.GetCollection(_options.Value.MongoOptions.DatabaseName, "OutboxMessage");
         
         _findOptions = new FindOptions<RawBsonDocument>
         {
@@ -59,6 +58,8 @@ public class MessageRelayWorker : BackgroundService
         };
 
         _deleteOptions = new DeleteOptions();
+        
+        _sliceSize = _options.Value.MongoOptions.Limit / _options.Value.MaxDegreeOfParallelism;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -109,11 +110,9 @@ public class MessageRelayWorker : BackgroundService
             
             var messages = await cursor.ToListAsync(stoppingToken);
             
-            var sliceSize = _options.Value.MongoOptions.Limit / _options.Value.MaxDegreeOfParallelism;
-            
-            var slices = messages.SliceInMemory(sliceSize);
+            var slices = messages.SliceInMemory(_sliceSize);
 
-            await Parallel.ForEachAsync(slices, stoppingToken, async (memory, token) => await ProcessCursorBatchAsync(memory, token));
+            await Parallel.ForEachAsync(slices, stoppingToken, async (memory, token) => await ProcessSliceAsync(memory, token));
         }
         finally
         {
@@ -122,7 +121,7 @@ public class MessageRelayWorker : BackgroundService
         }
     }
 
-    private async Task ProcessCursorBatchAsync(ReadOnlyMemory<RawBsonDocument> messages, CancellationToken stoppingToken)
+    private async Task ProcessSliceAsync(ReadOnlyMemory<RawBsonDocument> messages, CancellationToken stoppingToken)
     {
         using var activity = _activitySource.StartActivity();
         var count = 0;
@@ -136,10 +135,7 @@ public class MessageRelayWorker : BackgroundService
         
         for (i = 0; i < messages.Length; i++)
         {
-            var stopwatch = Stopwatch.StartNew();
             var message = messages.Span[i].ToServiceBusMessage();
-            stopwatch.Stop();
-            _logger.LogInformation("ToServiceBusMessage: {Duration}", stopwatch.ElapsedMilliseconds);
             
             if (count < batchSize && messageBatch.TryAddMessage(message))
             {
@@ -176,6 +172,7 @@ public class MessageRelayWorker : BackgroundService
         var last = lastMessage["_id"].AsGuid.ToString();
         
         var builder = Builders<RawBsonDocument>.Filter;
+        //Todo: Remover essa conversão de string para BsonValue
         var filter = builder.And(builder.Gte(r => r["_id"], first), builder.Lte(r => r["_id"], last));
 
         await _outboxMessages.DeleteManyAsync(_currentSession, filter, _deleteOptions, stoppingToken);
