@@ -83,17 +83,20 @@ public class MessageRelayWorker : BackgroundService
             //todo: tratar as exceptions
             finally
             {
-                stopwatch.Stop();
-
-                if (stopwatch.ElapsedMilliseconds < _options.Value.Delay)
-                {
-                    await Task.Delay(_options.Value.Delay - (int)stopwatch.ElapsedMilliseconds, stoppingToken);
-                }
-                
-                stopwatch.Reset();
+                await HandleDelay(stopwatch, stoppingToken);
             }
             
             break;
+        }
+    }
+    
+    private async Task HandleDelay(Stopwatch stopwatch, CancellationToken stoppingToken)
+    {
+        stopwatch.Stop();
+        var remainingDelay = _options.Value.Delay - (int)stopwatch.ElapsedMilliseconds;
+        if (remainingDelay > 0)
+        {
+            await Task.Delay(remainingDelay, stoppingToken);
         }
     }
 
@@ -171,6 +174,7 @@ public class MessageRelayWorker : BackgroundService
         var first = firstMessage["_id"].AsGuid.ToString();
         var last = lastMessage["_id"].AsGuid.ToString();
         
+        // Utilizar cache para para esse filter
         var builder = Builders<RawBsonDocument>.Filter;
         //Todo: Remover essa conversão de string para BsonValue
         var filter = builder.And(builder.Gte(r => r["_id"], first), builder.Lte(r => r["_id"], last));
