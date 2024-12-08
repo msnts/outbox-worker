@@ -2,6 +2,7 @@ using System.Diagnostics;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
+using OutboxWorker.ServiceDefaults;
 using OutboxWorker.WorkerService;
 using OutboxWorker.WorkerService.Configurations;
 
@@ -31,7 +32,11 @@ BsonClassMap.RegisterClassMap<User>(classMap =>
     classMap.SetIgnoreExtraElements(true);
 });
 
-builder.Services.AddOptions<OutboxOptions>().BindConfiguration(nameof(OutboxOptions));
+builder.Services.AddOptions<OutboxOptions>()
+    .BindConfiguration(nameof(OutboxOptions))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.AddSingleton<ActivitySource>(x => new ActivitySource("OutboxWorker.DistributedTracing", "1.0.0"));
 builder.Services.AddSingleton<OutboxMetrics>();
 

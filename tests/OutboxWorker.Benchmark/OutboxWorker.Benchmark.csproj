@@ -12,7 +12,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\OutboxWorker.WorkerService\OutboxWorker.WorkerService.csproj" />
+      <ProjectReference Include="..\..\src\OutboxWorker.WorkerService\OutboxWorker.WorkerService.csproj" />
     </ItemGroup>
 
 </Project>

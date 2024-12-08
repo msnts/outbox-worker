@@ -59,7 +59,7 @@ public class MessageRelayWorker : BackgroundService
 
         _deleteOptions = new DeleteOptions();
         
-        _sliceSize = _options.Value.MongoOptions.Limit / _options.Value.MaxDegreeOfParallelism;
+        _sliceSize = _options.Value.SliceSize;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

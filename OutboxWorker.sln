@@ -2,13 +2,19 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.0.0
 MinimumVisualStudioVersion = 17.8.0.0
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OutboxWorker.AppHost", "OutboxWorker.AppHost\OutboxWorker.AppHost.csproj", "{D97AEEB0-1F36-445D-87A1-2EFC38532D1A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OutboxWorker.AppHost", "src\OutboxWorker.AppHost\OutboxWorker.AppHost.csproj", "{D97AEEB0-1F36-445D-87A1-2EFC38532D1A}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OutboxWorker.ServiceDefaults", "OutboxWorker.ServiceDefaults\OutboxWorker.ServiceDefaults.csproj", "{A9192F6D-4C26-4DD3-BBE3-1BF88230CA8D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OutboxWorker.ServiceDefaults", "src\OutboxWorker.ServiceDefaults\OutboxWorker.ServiceDefaults.csproj", "{A9192F6D-4C26-4DD3-BBE3-1BF88230CA8D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OutboxWorker.WorkerService", "OutboxWorker.WorkerService\OutboxWorker.WorkerService.csproj", "{9D90A85B-94E9-49F0-8695-49CE8DC689E8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OutboxWorker.WorkerService", "src\OutboxWorker.WorkerService\OutboxWorker.WorkerService.csproj", "{9D90A85B-94E9-49F0-8695-49CE8DC689E8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OutboxWorker.Benchmark", "OutboxWorker.Benchmark\OutboxWorker.Benchmark.csproj", "{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OutboxWorker.Benchmark", "tests\OutboxWorker.Benchmark\OutboxWorker.Benchmark.csproj", "{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{25FEF95B-DDE3-4198-8632-00F8F24C041E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{E0C4C43C-88DF-4101-AD47-EE1444D024D3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OutboxWorker.WokerService.Tests", "tests\OutboxWorker.WokerService.Tests\OutboxWorker.WokerService.Tests.csproj", "{FA6BF594-0E06-4FF7-9BEF-6989AFCB0E2C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,11 +38,37 @@ Global
 		{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{629AE1CF-C4B3-4D29-83E2-6CAED11699A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8A49E54C-F5AC-414E-93ED-3BE8EA99BAA2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8A49E54C-F5AC-414E-93ED-3BE8EA99BAA2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8A49E54C-F5AC-414E-93ED-3BE8EA99BAA2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8A49E54C-F5AC-414E-93ED-3BE8EA99BAA2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{245ED57B-364B-4A0F-884F-9692F4031C55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{245ED57B-364B-4A0F-884F-9692F4031C55}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{245ED57B-364B-4A0F-884F-9692F4031C55}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{245ED57B-364B-4A0F-884F-9692F4031C55}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1C08B1BB-D3B0-4109-A13D-42A8C054B724}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C08B1BB-D3B0-4109-A13D-42A8C054B724}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C08B1BB-D3B0-4109-A13D-42A8C054B724}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C08B1BB-D3B0-4109-A13D-42A8C054B724}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FA6BF594-0E06-4FF7-9BEF-6989AFCB0E2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA6BF594-0E06-4FF7-9BEF-6989AFCB0E2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FA6BF594-0E06-4FF7-9BEF-6989AFCB0E2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FA6BF594-0E06-4FF7-9BEF-6989AFCB0E2C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BD920102-2D22-4418-9A5A-98D781D59259}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D97AEEB0-1F36-445D-87A1-2EFC38532D1A} = {25FEF95B-DDE3-4198-8632-00F8F24C041E}
+		{9D90A85B-94E9-49F0-8695-49CE8DC689E8} = {25FEF95B-DDE3-4198-8632-00F8F24C041E}
+		{A9192F6D-4C26-4DD3-BBE3-1BF88230CA8D} = {25FEF95B-DDE3-4198-8632-00F8F24C041E}
+		{629AE1CF-C4B3-4D29-83E2-6CAED11699A7} = {E0C4C43C-88DF-4101-AD47-EE1444D024D3}
+		{8A49E54C-F5AC-414E-93ED-3BE8EA99BAA2} = {E0C4C43C-88DF-4101-AD47-EE1444D024D3}
+		{1C08B1BB-D3B0-4109-A13D-42A8C054B724} = {25FEF95B-DDE3-4198-8632-00F8F24C041E}
+		{245ED57B-364B-4A0F-884F-9692F4031C55} = {25FEF95B-DDE3-4198-8632-00F8F24C041E}
+		{FA6BF594-0E06-4FF7-9BEF-6989AFCB0E2C} = {E0C4C43C-88DF-4101-AD47-EE1444D024D3}
 	EndGlobalSection
 EndGlobal
