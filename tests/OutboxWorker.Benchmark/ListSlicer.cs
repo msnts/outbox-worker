@@ -6,22 +6,17 @@ namespace OutboxWorker.Benchmark;
 [MemoryDiagnoser]
 public class ListSlicer
 {
-    private readonly List<int> data;
+    private readonly List<int> _data = [..Enumerable.Range(0, 1_000)];
 
-    public ListSlicer()
-    {
-        data = new(Enumerable.Range(0, 1_000));
-    }
-    
     [Benchmark]
     public void AsMemory()
     {
-        data.AsMemory();
+        _data.AsMemory();
     }
     
     [Benchmark]
     public void Slice()
     {
-        data.SliceInMemory(10);
+        _data.SliceInMemory(10);
     }
 }
