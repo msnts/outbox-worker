@@ -1,5 +1,6 @@
 using Bogus;
 using Bogus.DataSets;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace OutboxWorker.WorkerService;
@@ -11,6 +12,18 @@ public class MessageGenerateWorker : BackgroundService
     public MessageGenerateWorker(IMongoClient mongoClient)
     {
         var database = mongoClient.GetDatabase("OutboxWorkerService");
+        
+        database.CreateCollection("OutboxMessage", new CreateCollectionOptions()
+        {
+            StorageEngine = new BsonDocument
+            {
+                { "wiredTiger", new BsonDocument
+                    {
+                        { "configString", "block_compressor=zstd" }
+                    }
+                }
+            }
+        });
 
         _outboxMessages = database.GetCollection<OutboxMessage>("OutboxMessage");
     }
