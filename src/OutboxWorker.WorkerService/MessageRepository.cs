@@ -6,8 +6,9 @@ using OutboxWorker.WorkerService.Configurations;
 
 namespace OutboxWorker.WorkerService;
 
-public class MessageRepository : IMessageRepository
+public class MessageRepository : IMessageRepository, IDisposable
 {
+    private const string IdPropertyName = "_id";
     private readonly IMongoClient _mongoClient;
     private readonly IMongoCollection<RawBsonDocument> _outboxMessages;
     private readonly MongoLock<Guid> _mongoLock;
@@ -16,6 +17,7 @@ public class MessageRepository : IMessageRepository
     private IClientSessionHandle? _currentSession;
     private readonly TimeSpan _lockLifetime;
     private readonly TimeSpan _lockTimeout;
+    private bool _disposed;
 
     public MessageRepository(IMongoClient mongoClient, IOptions<OutboxOptions> options)
     {
@@ -23,7 +25,7 @@ public class MessageRepository : IMessageRepository
         _findOptions = CreateFindOptions(options.Value);
         _deleteOptions = new DeleteOptions();
         var database = _mongoClient.GetDatabase(options.Value.MongoOptions.DatabaseName);
-        _outboxMessages = database.GetCollection<RawBsonDocument>("OutboxMessage");;
+        _outboxMessages = database.GetCollection<RawBsonDocument>("OutboxMessage");
         var locks = database.GetCollection<LockAcquire<Guid>>("locks");
         var signals = database.GetCollection<ReleaseSignal>("signals");
         
@@ -37,7 +39,10 @@ public class MessageRepository : IMessageRepository
 
     public async Task StartTransactionAsync(CancellationToken cancellationToken)
     {
-        _currentSession = await _mongoClient.StartSessionAsync(cancellationToken: cancellationToken);
+        _currentSession ??= await _mongoClient.StartSessionAsync(cancellationToken: cancellationToken);
+
+        if (_currentSession.IsInTransaction) return;
+        
         _currentSession.StartTransaction();
     }
 
@@ -45,7 +50,7 @@ public class MessageRepository : IMessageRepository
     {
         if (_currentSession?.IsInTransaction is false)
         {
-            throw new Exception();
+            throw new NonExistentTransactionException();
         }
         await _currentSession!.CommitTransactionAsync(cancellationToken);
         _currentSession.Dispose();
@@ -56,7 +61,7 @@ public class MessageRepository : IMessageRepository
     {
         if (_currentSession?.IsInTransaction is false)
         {
-            throw new Exception();
+            throw new NonExistentTransactionException();
         }
         await _currentSession!.AbortTransactionAsync(cancellationToken);
         _currentSession.Dispose();
@@ -65,7 +70,7 @@ public class MessageRepository : IMessageRepository
     
     public async Task<List<RawBsonDocument>> FindMessagesAsync(CancellationToken cancellationToken)
     {
-        var cursor = await _outboxMessages.FindAsync(_currentSession, x => true, _findOptions, cancellationToken);
+        using var cursor = await _outboxMessages.FindAsync(_currentSession, x => true, _findOptions, cancellationToken);
         return await cursor.ToListAsync(cancellationToken);
     }
 
@@ -80,20 +85,40 @@ public class MessageRepository : IMessageRepository
         return _mongoLock.AcquireAsync(_lockLifetime, _lockTimeout);
     }
 
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        
+        if (disposing)
+        {
+            _currentSession?.Dispose();
+        }
+        
+        _disposed = true;
+    }
+
     private static FindOptions<RawBsonDocument> CreateFindOptions(OutboxOptions options) => new()
     {
-        Sort = Builders<RawBsonDocument>.Sort.Ascending(m => m["_id"]),
+        Sort = Builders<RawBsonDocument>.Sort.Ascending(m => m[IdPropertyName]),
         Limit = options.MongoOptions.Limit,
         BatchSize = options.MongoOptions.BatchSize
     };
 
     private static FilterDefinition<RawBsonDocument> CreateDeleteFilter(RawBsonDocument firstMessage, RawBsonDocument lastMessage)
     {
-        //Todo: Utilizar cache para para esse filter
         var builder = Builders<RawBsonDocument>.Filter;
-        var first = firstMessage["_id"].AsGuid.ToString();
-        var last = lastMessage["_id"].AsGuid.ToString();
-        //Todo: Remover essa conversão de string para BsonValue
-        return builder.And(builder.Gte(r => r["_id"], first), builder.Lte(r => r["_id"], last));
+
+        return builder.And(
+            builder.Gte(r => r[IdPropertyName], firstMessage[IdPropertyName]), 
+            builder.Lte(r => r[IdPropertyName], lastMessage[IdPropertyName]));
     }
 }
