@@ -34,12 +34,15 @@ public class MessageRelayWorker : BackgroundService
             stopwatch.Start();
             
             using var activity = _activitySource.StartActivity();
-            
+
             try
             {
                 await _messageProcessor.ProcessMessagesAsync(stoppingToken);
             }
-            //todo: tratar as exceptions
+            catch (Exception e)
+            {
+                _logger.LogError(e.Message, e);
+            }
             finally
             {
                 await HandleDelay(stopwatch, stoppingToken);
