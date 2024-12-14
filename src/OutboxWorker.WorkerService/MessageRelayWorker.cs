@@ -16,36 +16,23 @@ public class MessageRelayWorker : BackgroundService
     private readonly ILogger<MessageRelayWorker> _logger;
     private readonly ServiceBusClient _serviceBusClient;
     private readonly ServiceBusSender _sender;
-    private readonly IMongoClient _mongoClient;
-    private readonly IMongoCollection<RawBsonDocument> _outboxMessages;
-    private readonly FindOptions<RawBsonDocument> _findOptions;
+    private readonly IMessageRepository _messageRepository;
     private readonly CreateMessageBatchOptions _batchOptions;
     private readonly OutboxMetrics _metrics;
     private readonly ParallelOptions _parallelOptions;
-    private readonly DeleteOptions _deleteOptions;
-    private IClientSessionHandle _currentSession;
     private readonly int _sliceSize;
 
-    public MessageRelayWorker(IOptions<OutboxOptions> options, IMongoClient mongoClient, ServiceBusClient busClient,
+    public MessageRelayWorker(IOptions<OutboxOptions> options, IMessageRepository repository, ServiceBusClient busClient,
         ActivitySource activitySource, ILogger<MessageRelayWorker> logger, OutboxMetrics metrics)
     {
         _options = options;
         _logger = logger;
         _activitySource = activitySource;
-        _mongoClient = mongoClient;
+        _messageRepository = repository;
         _serviceBusClient = busClient;
         _metrics = metrics;
         
         _sender = _serviceBusClient.CreateSender(_options.Value.BrokerOptions.EntityName);
-        
-        _outboxMessages = _mongoClient.GetCollection(_options.Value.MongoOptions.DatabaseName, "OutboxMessage");
-        
-        _findOptions = new FindOptions<RawBsonDocument>
-        {
-            Sort = Builders<RawBsonDocument>.Sort.Ascending(m => m["_id"]),
-            Limit = _options.Value.MongoOptions.Limit,
-            BatchSize = _options.Value.MongoOptions.BatchSize
-        };
         
         _batchOptions = new CreateMessageBatchOptions()
         {
@@ -56,8 +43,6 @@ public class MessageRelayWorker : BackgroundService
         {
             MaxDegreeOfParallelism = _options.Value.MaxDegreeOfParallelism
         };
-
-        _deleteOptions = new DeleteOptions();
         
         _sliceSize = _options.Value.SliceSize;
     }
@@ -76,9 +61,12 @@ public class MessageRelayWorker : BackgroundService
             
             try
             {
-                //todo: acquire lock
-
-                await DoExecuteAsync(stoppingToken);
+                await using var distributedLock = await _messageRepository.AcquireLockAsync(stoppingToken);
+                
+                if (distributedLock.Acquired)
+                {
+                    await DoExecuteAsync(stoppingToken);
+                }
             }
             //todo: tratar as exceptions
             finally
@@ -90,6 +78,7 @@ public class MessageRelayWorker : BackgroundService
         }
     }
     
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private async Task HandleDelay(Stopwatch stopwatch, CancellationToken stoppingToken)
     {
         stopwatch.Stop();
@@ -103,15 +92,11 @@ public class MessageRelayWorker : BackgroundService
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private async Task DoExecuteAsync(CancellationToken stoppingToken)
     {
-        using var session = await _mongoClient.StartSessionAsync(cancellationToken: stoppingToken);
-        session.StartTransaction();
-        _currentSession = session;
+        await _messageRepository.StartTransactionAsync(stoppingToken);
 
         try
         {
-            using var cursor = await _outboxMessages.FindAsync(session, x => true, _findOptions, stoppingToken);
-            
-            var messages = await cursor.ToListAsync(stoppingToken);
+            var messages = await _messageRepository.FindMessagesAsync(stoppingToken);
             
             var slices = messages.SliceInMemory(_sliceSize);
 
@@ -119,7 +104,7 @@ public class MessageRelayWorker : BackgroundService
         }
         finally
         {
-            await session.AbortTransactionAsync(stoppingToken);
+            await _messageRepository.AbortTransactionAsync(stoppingToken);
             //await session.CommitTransactionAsync(stoppingToken);
         }
     }
@@ -166,26 +151,5 @@ public class MessageRelayWorker : BackgroundService
         await Task.Delay(300, stoppingToken);
         messageBatch.Dispose();
         _metrics.IncrementMessageCount(messageBatch.Count);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private async Task RemoveMessageBatchAsync(RawBsonDocument firstMessage, RawBsonDocument lastMessage, CancellationToken stoppingToken)
-    {
-        var first = firstMessage["_id"].AsGuid.ToString();
-        var last = lastMessage["_id"].AsGuid.ToString();
-        
-        // Utilizar cache para para esse filter
-        var builder = Builders<RawBsonDocument>.Filter;
-        //Todo: Remover essa conversão de string para BsonValue
-        var filter = builder.And(builder.Gte(r => r["_id"], first), builder.Lte(r => r["_id"], last));
-
-        await _outboxMessages.DeleteManyAsync(_currentSession, filter, _deleteOptions, stoppingToken);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private async Task ProcessMessageBatchAsync(ServiceBusMessageBatch messageBatch, RawBsonDocument firstMessage, RawBsonDocument lastMessage, CancellationToken stoppingToken)
-    {
-        await SendMessageBatchAsync(messageBatch, stoppingToken);
-        await RemoveMessageBatchAsync(firstMessage, lastMessage, stoppingToken);
     }
 }

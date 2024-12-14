@@ -13,7 +13,7 @@ namespace OutboxWorker.WorkerService.Tests
     public class MessageRelayWorkerTests
     {
         private readonly Mock<IOptions<OutboxOptions>> _optionsMock;
-        private readonly Mock<IMongoClient> _mongoClientMock;
+        private readonly Mock<IMessageRepository> _messageRepositoryMock;
         private readonly Mock<ServiceBusClient> _serviceBusClientMock;
         private readonly Mock<ActivitySource> _activitySourceMock;
         private readonly Mock<ILogger<MessageRelayWorker>> _loggerMock;
@@ -26,7 +26,7 @@ namespace OutboxWorker.WorkerService.Tests
         {
             // Setup basic mocks
             _optionsMock = new Mock<IOptions<OutboxOptions>>();
-            _mongoClientMock = new Mock<IMongoClient>();
+            _messageRepositoryMock = new();
             _serviceBusClientMock = new Mock<ServiceBusClient>();
             _activitySourceMock = new Mock<ActivitySource>("test");
             _loggerMock = new Mock<ILogger<MessageRelayWorker>>();
@@ -62,35 +62,6 @@ namespace OutboxWorker.WorkerService.Tests
             
             databaseMock.Setup(x => x.GetCollection<RawBsonDocument>(It.IsAny<string>(), null))
                 .Returns(_collectionMock.Object);
-
-            // Setup MongoClient
-            _mongoClientMock
-                .Setup(x => x.GetDatabase(It.IsAny<string>(), null))
-                .Returns(databaseMock.Object);
-
-        }
-
-        [Fact]
-        public async Task ExecuteAsync_WhenCalled_StartsSessionAndTransaction()
-        {
-            // Arrange
-            var cancellationToken = new CancellationToken();
-            
-            _mongoClientMock
-                .Setup(x => x.StartSessionAsync(It.IsAny<ClientSessionOptions>(), cancellationToken))
-                .ReturnsAsync(_sessionMock.Object);
-
-            _sessionMock
-                .Setup(x => x.StartTransaction(It.IsAny<TransactionOptions>()));
-
-            var worker = CreateWorker();
-
-            // Act
-            await worker.StartAsync(cancellationToken);
-
-            // Assert
-            _mongoClientMock.Verify(x => x.StartSessionAsync(It.IsAny<ClientSessionOptions>(), cancellationToken), Times.Once);
-            _sessionMock.Verify(x => x.StartTransaction(It.IsAny<TransactionOptions>()), Times.Once);
         }
 
         [Fact]
@@ -162,7 +133,7 @@ namespace OutboxWorker.WorkerService.Tests
             await worker.StartAsync(cts.Token);
 
             // Assert
-            _mongoClientMock.Verify(x => x.StartSessionAsync(It.IsAny<ClientSessionOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+            _messageRepositoryMock.Verify(x => x.StartTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
         }
         
         [Fact]
@@ -193,7 +164,7 @@ namespace OutboxWorker.WorkerService.Tests
         {
             return new MessageRelayWorker(
                 _optionsMock.Object,
-                _mongoClientMock.Object,
+                _messageRepositoryMock.Object,
                 _serviceBusClientMock.Object,
                 _activitySourceMock.Object,
                 _loggerMock.Object,

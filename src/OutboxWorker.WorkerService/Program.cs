@@ -39,6 +39,7 @@ builder.Services.AddOptions<OutboxOptions>()
 
 builder.Services.AddSingleton<ActivitySource>(x => new ActivitySource("OutboxWorker.DistributedTracing", "1.0.0"));
 builder.Services.AddSingleton<OutboxMetrics>();
+builder.Services.AddSingleton<IMessageRepository, MessageRepository>();
 
 var host = builder.Build();
 host.Run();
