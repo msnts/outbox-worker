@@ -14,6 +14,8 @@ public class MessageRepository : IMessageRepository
     private readonly FindOptions<RawBsonDocument> _findOptions;
     private readonly DeleteOptions _deleteOptions;
     private IClientSessionHandle? _currentSession;
+    private readonly TimeSpan _lockLifetime;
+    private readonly TimeSpan _lockTimeout;
 
     public MessageRepository(IMongoClient mongoClient, IOptions<OutboxOptions> options)
     {
@@ -27,7 +29,10 @@ public class MessageRepository : IMessageRepository
         
         var lockId = Guid.Parse("BF431614-4FB0-4489-84AA-D3EFEEF6BE7E");
 
-        _mongoLock = new MongoLock<Guid>(locks, signals, lockId);
+        //_mongoLock = new MongoLock<Guid>(locks, signals, lockId);
+
+        _lockLifetime = TimeSpan.FromSeconds(options.Value.LockOptions.Lifetime);
+        _lockTimeout = TimeSpan.FromSeconds(options.Value.LockOptions.Timeout);
     }
 
     public async Task StartTransactionAsync(CancellationToken cancellationToken)
@@ -72,7 +77,7 @@ public class MessageRepository : IMessageRepository
 
     public Task<IAcquire> AcquireLockAsync(CancellationToken stoppingToken)
     {
-        return _mongoLock.AcquireAsync(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(10));
+        return _mongoLock.AcquireAsync(_lockLifetime, _lockTimeout);
     }
 
     private static FindOptions<RawBsonDocument> CreateFindOptions(OutboxOptions options) => new()

@@ -8,6 +8,8 @@ public class OutboxOptions
     public MongoOptions MongoOptions { get; set; }
     [Required]
     public BrokerOptions BrokerOptions { get; set; }
+    [Required]
+    public LockOptions LockOptions { get; set; }
     [Range(1_000,10_000)]
     public int Delay { get; set; }
     [Range(1,8)]
