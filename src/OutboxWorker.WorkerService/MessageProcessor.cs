@@ -103,7 +103,7 @@ public class MessageProcessor : IMessageProcessor
         using var activity = _activitySource.StartActivity();
         //await _sender.SendMessagesAsync(messageBatch, cancellationToken);
         await Task.Delay(300, cancellationToken);
-        messageBatch.Dispose();
         _metrics.IncrementMessageCount(messageBatch.Count);
+        messageBatch.Dispose();
     }
 }
