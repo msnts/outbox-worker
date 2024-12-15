@@ -8,6 +8,7 @@ namespace OutboxWorker.WorkerService;
 public class MessageGenerateWorker : BackgroundService
 {
     private readonly IMongoCollection<OutboxMessage> _outboxMessages;
+    private readonly Faker<User> _userGenerator;
     
     public MessageGenerateWorker(IMongoClient mongoClient)
     {
@@ -26,11 +27,8 @@ public class MessageGenerateWorker : BackgroundService
         });
 
         _outboxMessages = database.GetCollection<OutboxMessage>("OutboxMessage");
-    }
-    
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        var usersGenerator = new Faker<User>()
+        
+        _userGenerator = new Faker<User>()
             .RuleFor(u => u.Id, f => Guid.NewGuid())
             .RuleFor(u => u.Gender, f => f.PickRandom<Name.Gender>())
             .RuleFor(u => u.FirstName, (f, u) => f.Name.FirstName(u.Gender))
@@ -40,22 +38,30 @@ public class MessageGenerateWorker : BackgroundService
             .RuleFor(u => u.Email, (f, u) => f.Internet.Email(u.FirstName, u.LastName))
             .RuleFor(u => u.CartId, f => Guid.NewGuid())
             .RuleFor(u => u.FullName, (f, u) => u.FirstName + " " + u.LastName);
-
-        var users = usersGenerator.Generate(10_000);
-        
-        var messages = new List<OutboxMessage>(10_000);
-
-        for (var i = 0; i < 10_000; i++)
+    }
+    
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
         {
-            messages.Add(new OutboxMessage
-            {
-                Id = Guid.CreateVersion7(),
-                CorrelationId = Guid.NewGuid(),
-                Subject = "UserCreated",
-                Body = users[i]
-            });
-        }
+            var users = _userGenerator.Generate(1000);
+        
+            var messages = new List<OutboxMessage>(1000);
 
-        return _outboxMessages.InsertManyAsync(messages, cancellationToken:stoppingToken);
+            for (var i = 0; i < 100; i++)
+            {
+                messages.Add(new OutboxMessage
+                {
+                    Id = Guid.CreateVersion7(),
+                    CorrelationId = Guid.NewGuid(),
+                    Subject = "UserCreated",
+                    Body = users[i]
+                });
+            }
+
+            await _outboxMessages.InsertManyAsync(messages, cancellationToken:stoppingToken);
+            
+            await Task.Delay(500, stoppingToken);
+        }
     }
 }
