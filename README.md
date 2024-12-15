@@ -5,6 +5,15 @@ This repository contains a project whose main objective is the study and evaluat
 With this purpose in mind, a message retransmission service is being developed using the transactional outbox pattern.
 Although the focus of this repository is on study, the Worker project is designed to be fully functional and productive. Therefore, everyone is encouraged to use and adapt what they find useful.
 
+## Project Assumptions
+
+* Process with concurrency control.
+* Specific to MongoDB.
+* Specific to Azure Service Bus.
+* Does not guarantee the ordering of published messages.
+* High throughput
+* Low memory consumption
+
 ## Topics / Resources Used
 
 * .NET
@@ -15,7 +24,6 @@ Although the focus of this repository is on study, the Worker project is designe
   - Traces
   - Metrics
 
-
 ## Todo
 
 - [ ] Multi Sender
@@ -23,7 +31,7 @@ Although the focus of this repository is on study, the Worker project is designe
 - [ ] Distributed Lock
 - [ ] Options Validation
 - [ ] Exception handling
-- [ ] Deleting messages
+- [x] Deleting messages
 - [ ] Message serialization
 - [x] ~~ArrayPool~~
 - [ ] Telemetry
