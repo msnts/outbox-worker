@@ -96,6 +96,8 @@ public class MessageProcessor : IMessageProcessor
         tasks[t] = SendMessageBatchAsync(messageBatch, cancellationToken);
 
         await Task.WhenAll(tasks);
+        
+        await _messageRepository.RemoveMessagesAsync(messages.Span[0], messages.Span[^1], cancellationToken);
     }
     
     private async Task SendMessageBatchAsync(ServiceBusMessageBatch messageBatch, CancellationToken cancellationToken)
