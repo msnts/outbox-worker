@@ -1,4 +1,5 @@
 # Outbox Worker - (MongoDB + Azure Service Bus)
+[![.NET](https://github.com/msnts/outbox-worker/actions/workflows/dotnet.yml/badge.svg)](https://github.com/msnts/outbox-worker/actions/workflows/dotnet.yml)
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
 
 This repository contains a project whose main objective is the study and evaluation of .NET resources, as well as the application of techniques for implementing high-performance solutions.
