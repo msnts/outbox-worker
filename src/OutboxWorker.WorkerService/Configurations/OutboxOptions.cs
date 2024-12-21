@@ -1,18 +1,23 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Options;
 
 namespace OutboxWorker.WorkerService.Configurations;
 
 public class OutboxOptions
 {
-    [Required]
+    [Required, ValidateObjectMembers]
     public MongoOptions MongoOptions { get; set; }
-    [Required]
+    
+    [Required, ValidateObjectMembers]
     public BrokerOptions BrokerOptions { get; set; }
-    [Required]
+    
+    [Required, ValidateObjectMembers]
     public LockOptions LockOptions { get; set; }
-    [Range(1_000,10_000)]
+    
+    [Range(1_000, 10_000)]
     public int Delay { get; set; }
-    [Range(1,8)]
+    
+    [Range(1, 32)]
     public int MaxDegreeOfParallelism { get; set; }
 
     public int SliceSize => MongoOptions.Limit / MaxDegreeOfParallelism;

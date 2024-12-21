@@ -30,7 +30,7 @@ Although the focus of this repository is on study, the Worker project is designe
 - [ ] Multi Sender
 - [x] MongoDB Compression 
 - [ ] Distributed Lock
-- [ ] Options Validation
+- [x] Options Validation
 - [ ] Exception handling
 - [x] Deleting messages
 - [ ] Message serialization

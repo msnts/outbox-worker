@@ -6,6 +6,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <UserSecretsId>dotnet-WorkerService-3e7250dd-ee01-4b7e-b509-e9b5ef4f959c</UserSecretsId>
         <LangVersion>13</LangVersion>
+        <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     </PropertyGroup>
     <ItemGroup>
         <RuntimeHostConfigurationOption Include="Azure.Experimental.EnableActivitySource" Value="false" />
