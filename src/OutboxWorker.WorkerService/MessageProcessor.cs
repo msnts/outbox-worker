@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using OutboxWorker.WorkerService.Configurations;
 using OutboxWorker.WorkerService.Extensions;
+using RoundRobin;
 
 namespace OutboxWorker.WorkerService;
 
@@ -13,6 +14,7 @@ public class MessageProcessor : IMessageProcessor
     private readonly ActivitySource _activitySource;
     private readonly ILogger<MessageRelayWorker> _logger;
     private readonly ServiceBusSender _sender;
+    private readonly RoundRobinList<ServiceBusSender> _senders;
     private readonly IMessageRepository _messageRepository;
     private readonly CreateMessageBatchOptions _batchOptions;
     private readonly OutboxMetrics _metrics;
@@ -29,6 +31,14 @@ public class MessageProcessor : IMessageProcessor
         
         _sender = busClient.CreateSender(_options.Value.BrokerOptions.EntityName);
         
+        var entityName = _options.Value.BrokerOptions.EntityName;
+        
+        _senders = new(
+            Enumerable.Range(0, _options.Value.BrokerOptions.SenderCount)
+                .Select(_ => busClient.CreateSender(entityName))
+                .ToArray()
+        );
+
         _batchOptions = new CreateMessageBatchOptions()
         {
             MaxSizeInBytes = 262144
@@ -71,14 +81,14 @@ public class MessageProcessor : IMessageProcessor
     {
         using var activity = _activitySource.StartActivity();
         var count = 0;
-        var t = 0u;
-        var taskCount = (messages.Length + _options.Value.BrokerOptions.BatchSize - 1) / _options.Value.BrokerOptions.BatchSize;
-        var tasks = new Task[taskCount];
+        var t = 0;
+        var messageCount = messages.Length;
         var batchSize = _options.Value.BrokerOptions.BatchSize;
+        var tasks = new Task[(messageCount + batchSize - 1) / batchSize];
         
         var messageBatch = await _sender.CreateMessageBatchAsync(_batchOptions, cancellationToken);
         
-        for (var i = 0; i < messages.Length; i++)
+        for (var i = 0; i < messageCount; i++)
         {
             var message = messages.Span[i].ToServiceBusMessage();
             
@@ -97,14 +107,14 @@ public class MessageProcessor : IMessageProcessor
 
         await Task.WhenAll(tasks);
         
-        await _messageRepository.RemoveMessagesAsync(messages.Span[0], messages.Span[^1], cancellationToken);
+        //await _messageRepository.RemoveMessagesAsync(messages.Span[0], messages.Span[^1], cancellationToken);
     }
     
     private async Task SendMessageBatchAsync(ServiceBusMessageBatch messageBatch, CancellationToken cancellationToken)
     {
         using var activity = _activitySource.StartActivity();
-        //await _sender.SendMessagesAsync(messageBatch, cancellationToken);
-        await Task.Delay(300, cancellationToken);
+        await _senders.Next().SendMessagesAsync(messageBatch, cancellationToken);
+        //await Task.Delay(300, cancellationToken);
         _metrics.IncrementMessageCount(messageBatch.Count);
         messageBatch.Dispose();
     }

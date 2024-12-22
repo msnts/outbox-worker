@@ -21,18 +21,19 @@ Although the focus of this repository is on study, the Worker project is designe
   - Concurrency and Asynchrony
   - Parallel Programming
   - Span<T> and Memory<T>
+  - Options Validation
 * Observability with OpenTelemetry
   - Traces
   - Metrics
+* Algorithms
+  - Round Robin
+* DataBase
+  - MongoDB Compression
 
 ## Todo
 
-- [ ] Multi Sender
-- [x] MongoDB Compression 
 - [ ] Distributed Lock
-- [x] Options Validation
 - [ ] Exception handling
-- [x] Deleting messages
 - [ ] Message serialization
 - [x] ~~ArrayPool~~
 - [ ] Telemetry
