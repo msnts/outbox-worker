@@ -1,6 +1,6 @@
 using System.Diagnostics.Metrics;
 
-namespace OutboxWorker.WorkerService;
+namespace OutboxWorker.MessageRelay.Metrics;
 
 public class OutboxMetrics
 {

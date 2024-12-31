@@ -1,9 +1,13 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OutboxWorker.WorkerService.Configurations;
+using OutboxWorker.MessageRelay.Metrics;
+using OutboxWorker.MessageRelay.Options;
+using OutboxWorker.MessageRelay.Processor;
 
-namespace OutboxWorker.WorkerService;
+namespace OutboxWorker.MessageRelay;
 
 public class MessageRelayWorker : BackgroundService
 {

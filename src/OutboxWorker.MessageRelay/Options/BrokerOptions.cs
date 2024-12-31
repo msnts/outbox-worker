@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace OutboxWorker.WorkerService.Configurations;
+namespace OutboxWorker.MessageRelay.Options;
 
 public class BrokerOptions
 {

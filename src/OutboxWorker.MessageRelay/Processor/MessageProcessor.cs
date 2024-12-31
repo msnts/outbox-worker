@@ -1,12 +1,15 @@
 using System.Diagnostics;
 using Azure.Messaging.ServiceBus;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
-using OutboxWorker.WorkerService.Configurations;
-using OutboxWorker.WorkerService.Extensions;
+using OutboxWorker.MessageRelay.Extensions;
+using OutboxWorker.MessageRelay.Metrics;
+using OutboxWorker.MessageRelay.Options;
+using OutboxWorker.MessageRelay.Repository;
 using RoundRobin;
 
-namespace OutboxWorker.WorkerService;
+namespace OutboxWorker.MessageRelay.Processor;
 
 public class MessageProcessor : IMessageProcessor
 {
@@ -66,14 +69,14 @@ public class MessageProcessor : IMessageProcessor
         try
         {
            var messages = await _messageRepository.FindMessagesAsync(cancellationToken);
-           
-           var slices = messages.SliceInMemory(_sliceSize);
+
+           var slices = messages.ChunkInMemory(_sliceSize);
 
            await Parallel.ForEachAsync(slices, _parallelOptions, async (memory, token) => await ProcessSliceAsync(memory, token));
         }
         finally
         {
-           await _messageRepository.CommitTransactionAsync(cancellationToken);
+           await _messageRepository.AbortTransactionAsync(cancellationToken);
         }
     }
     
@@ -107,14 +110,14 @@ public class MessageProcessor : IMessageProcessor
 
         await Task.WhenAll(tasks);
         
-        //await _messageRepository.RemoveMessagesAsync(messages.Span[0], messages.Span[^1], cancellationToken);
+        await _messageRepository.RemoveMessagesAsync(messages.Span[0], messages.Span[^1], cancellationToken);
     }
     
     private async Task SendMessageBatchAsync(ServiceBusMessageBatch messageBatch, CancellationToken cancellationToken)
     {
         using var activity = _activitySource.StartActivity();
-        await _senders.Next().SendMessagesAsync(messageBatch, cancellationToken);
-        //await Task.Delay(300, cancellationToken);
+        //await _senders.Next().SendMessagesAsync(messageBatch, cancellationToken);
+        await Task.Delay(300, cancellationToken);
         _metrics.IncrementMessageCount(messageBatch.Count);
         messageBatch.Dispose();
     }

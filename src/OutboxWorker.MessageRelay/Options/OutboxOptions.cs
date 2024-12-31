@@ -1,7 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Options;
+using OutboxWorker.WorkerService.Configurations;
 
-namespace OutboxWorker.WorkerService.Configurations;
+namespace OutboxWorker.MessageRelay.Options;
 
 public class OutboxOptions
 {

@@ -1,7 +1,6 @@
-using DistributedLock.Mongo;
 using MongoDB.Bson;
 
-namespace OutboxWorker.WorkerService;
+namespace OutboxWorker.MessageRelay.Repository;
 
 public interface IMessageRepository
 {
@@ -10,5 +9,6 @@ public interface IMessageRepository
     Task AbortTransactionAsync(CancellationToken stoppingToken);
     Task<List<RawBsonDocument>> FindMessagesAsync(CancellationToken cancellationToken);
     Task RemoveMessagesAsync(RawBsonDocument firstMessage, RawBsonDocument lastMessage, CancellationToken cancellationToken);
-    Task<IAcquire> AcquireLockAsync(CancellationToken stoppingToken);
+    Task BulkWriteDeleteManyModelAsync(ReadOnlyMemory<RawBsonDocument> messages, CancellationToken cancellationToken);
+    //Task<IAcquire> AcquireLockAsync(CancellationToken stoppingToken);
 }

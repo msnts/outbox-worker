@@ -1,4 +1,4 @@
-namespace OutboxWorker.WorkerService;
+namespace OutboxWorker.MessageRelay.Processor;
 
 public interface IMessageProcessor
 {

@@ -1,11 +1,9 @@
-using System.Diagnostics;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using MongoDB.Driver.Core.Configuration;
+using OutboxWorker.MessageRelay.Configurations;
 using OutboxWorker.ServiceDefaults;
 using OutboxWorker.WorkerService;
-using OutboxWorker.WorkerService.Configurations;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -27,7 +25,6 @@ builder.AddMongoDBClient("mongodb", configureClientSettings: settings =>
 builder.AddAzureServiceBusClient("messaging");
 
 //builder.Services.AddHostedService<MessageGenerateWorker>();
-builder.Services.AddHostedService<MessageRelayWorker>();
 
 #pragma warning disable 618
 BsonDefaults.GuidRepresentation = GuidRepresentation.Standard;
@@ -48,15 +45,7 @@ BsonClassMap.RegisterClassMap<User>(classMap =>
     classMap.SetIgnoreExtraElements(true);
 });
 
-builder.Services.AddOptions<OutboxOptions>()
-    .BindConfiguration(nameof(OutboxOptions))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-
-builder.Services.AddSingleton<ActivitySource>(x => new ActivitySource("OutboxWorker.DistributedTracing", "1.0.0"));
-builder.Services.AddSingleton<OutboxMetrics>();
-builder.Services.AddSingleton<IMessageRepository, MessageRepository>();
-builder.Services.AddSingleton<IMessageProcessor, MessageProcessor>();
+builder.Services.AddOutbox();
 
 var host = builder.Build();
 host.Run();

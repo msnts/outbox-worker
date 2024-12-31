@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using Azure.Messaging.ServiceBus;
 using MongoDB.Bson;
 
-namespace OutboxWorker.WorkerService.Extensions;
+namespace OutboxWorker.MessageRelay.Extensions;
 
 public static class RawBsonDocumentExtensions
 {

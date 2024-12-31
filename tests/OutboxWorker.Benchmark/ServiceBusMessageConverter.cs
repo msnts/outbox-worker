@@ -2,8 +2,7 @@ using BenchmarkDotNet.Attributes;
 using Bogus;
 using Bogus.DataSets;
 using MongoDB.Bson;
-using OutboxWorker.WorkerService;
-using OutboxWorker.WorkerService.Extensions;
+using OutboxWorker.MessageRelay.Extensions;
 
 namespace OutboxWorker.Benchmark;
 
@@ -25,7 +24,7 @@ public class ServiceBusMessageConverter
             .RuleFor(u => u.FullName, (f, u) => u.FirstName + " " + u.LastName);
 
 
-        var message = new OutboxMessage
+        var message = new 
         {
             Id = Guid.CreateVersion7(),
             CorrelationId = Guid.NewGuid(),
